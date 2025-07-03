@@ -35,7 +35,7 @@ pip install -r requirements.txt
 📄 Citation
 If you use this tool in your research, please cite:
 
-Rajpurohit, K. (2025). Spearman Correlation Heatmap Generator (v1.0.1) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.15797835
+Rajpurohit, K., & Vibash Kalyaan, V. L. (2025). Spearman Correlation Heatmap Generator (Version 1.0.1) [Computer software]. https://doi.org/10.5281/zenodo.15797835
 
 BibTeX:
 
