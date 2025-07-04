@@ -1,11 +1,10 @@
+import sys
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy.stats import spearmanr
 import argparse
-import os
-import sys
 
 def load_excel_data(file_path: str, sheet_name: str) -> pd.DataFrame:
     """
@@ -39,15 +38,15 @@ def compute_spearman_corr(df: pd.DataFrame):
 
     return corr_df, pval_df
 
-def annotate_significance(corr_df: pd.DataFrame, pval_df: pd.DataFrame) -> pd.DataFrame:
+def annotate_significance(corr_df: pd.DataFrame, pval_df: pd.DataFrame, alpha=0.05) -> pd.DataFrame:
     """
     Annotates the correlation matrix with correlation values and significant p-values.
     """
     annot = corr_df.round(2).astype(str)
     for i in corr_df.index:
         for j in corr_df.columns:
-            if i != j and pval_df.loc[i, j] < 0.05:
-                annot.loc[i, j] += f"\n(p={pval_df.loc[i, j]:.2g})"
+            if pval_df.loc[i, j] < alpha:
+                annot.loc[i, j] += '*'
     return annot
 
 def plot_heatmap(corr_df, annot_df, title, output_file):
@@ -60,11 +59,10 @@ def plot_heatmap(corr_df, annot_df, title, output_file):
     plt.title(title)
     plt.tight_layout()
     plt.savefig(output_file)
-    print(f"Heatmap saved to: {os.path.abspath(output_file)}")
-    plt.show()
+    plt.close()
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate a Spearman correlation heatmap from an Excel sheet.")
+    parser = argparse.ArgumentParser(description="Generate Spearman correlation heatmap from Excel data.")
     parser.add_argument("file", help="Path to the Excel file.")
     parser.add_argument("sheet", help="Sheet name in the Excel file.")
     parser.add_argument("--title", default="Spearman Correlation Matrix", help="Title of the heatmap.")
