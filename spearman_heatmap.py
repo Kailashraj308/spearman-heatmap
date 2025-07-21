@@ -1,84 +1,142 @@
-import sys
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.stats import spearmanr
-import argparse
+# -*- coding: utf-8 -*-
+"""
+Interactive Spearman Correlation Analysis and Heatmap Generation
 
-def load_excel_data(file_path: str, sheet_name: str) -> pd.DataFrame:
+This script interactively prompts the user for a file path, a sheet name,
+and a title, then performs a Spearman rank-order correlation analysis,
+generates a heatmap, and saves the plot to a file. (Reccomended to run in google colab)
+
+Author: Kailash Rajpurohit
+License: MIT
+"""
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr
+import os
+import re
+
+def load_and_clean_data(file_path, sheet_name):
     """
-    Loads data from an Excel file, selects numeric columns, and drops columns with missing values.
+    Loads data from a specific sheet of an Excel file and cleans it.
+
+    Args:
+        file_path (str): The path to the input Excel file.
+        sheet_name (str): The name of the sheet to load.
+
+    Returns:
+        pd.DataFrame: A cleaned pandas DataFrame with no missing values,
+                      or None if the file/sheet cannot be loaded.
     """
     try:
         df = pd.read_excel(file_path, sheet_name=sheet_name)
-        df = df.select_dtypes(include=[np.number])  # Keep only numeric columns
-        df = df.dropna(axis=1, how='any')           # Drop columns with any NaN values
-        if df.empty:
-            print("No usable numeric data available after cleaning.")
-            sys.exit(1)
-        return df
+        print(f"Successfully loaded sheet: '{sheet_name}'")
+        
+        # Drop rows with any missing values to ensure calculations are consistent.
+        df_clean = df.dropna(axis=0, how='any')
+        
+        print(f"Data cleaned. Original rows: {len(df)}, Cleaned rows: {len(df_clean)}")
+        return df_clean
+
+    except FileNotFoundError:
+        print(f"Error: The file was not found at '{file_path}'")
+        return None
     except Exception as e:
-        print(f"Error loading Excel file: {e}")
-        sys.exit(1)
+        print(f"An error occurred while loading the data: {e}")
+        return None
 
-def compute_spearman_corr(df: pd.DataFrame):
+def calculate_spearman_correlation(df):
     """
-    Computes Spearman correlation and p-value matrices pairwise.
+    Calculates the Spearman correlation matrix and p-values for a DataFrame.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame (must contain only numeric data).
+
+    Returns:
+        tuple: A tuple containing the correlation DataFrame and the p-value DataFrame.
     """
-    cols = df.columns
-    corr_df = pd.DataFrame(index=cols, columns=cols, dtype=float)
-    pval_df = pd.DataFrame(index=cols, columns=cols, dtype=float)
-
-    for col1 in cols:
-        for col2 in cols:
-            rho, pval = spearmanr(df[col1], df[col2])
-            corr_df.loc[col1, col2] = rho
-            pval_df.loc[col1, col2] = pval
-
+    if df.shape[1] < 2:
+        print("Error: Not enough numeric columns to perform correlation.")
+        return None, None
+        
+    corr_matrix, pval_matrix = spearmanr(df)
+    corr_df = pd.DataFrame(corr_matrix, columns=df.columns, index=df.columns)
+    pval_df = pd.DataFrame(pval_matrix, columns=df.columns, index=df.columns)
+    
     return corr_df, pval_df
 
-def annotate_significance(corr_df: pd.DataFrame, pval_df: pd.DataFrame, alpha=0.05) -> pd.DataFrame:
+def generate_heatmap(corr_df, pval_df, title, output_path):
     """
-    Annotates the correlation matrix with correlation values and significant p-values.
+    Generates and saves a heatmap from correlation and p-value data.
+
+    Args:
+        corr_df (pd.DataFrame): DataFrame of correlation coefficients.
+        pval_df (pd.DataFrame): DataFrame of p-values.
+        title (str): The title for the heatmap plot.
+        output_path (str): The path to save the generated heatmap image.
     """
+    # Create annotations: format correlation coefficient and add p-value if significant
     annot = corr_df.round(2).astype(str)
     for i in corr_df.index:
         for j in corr_df.columns:
-            if pval_df.loc[i, j] < alpha:
-                annot.loc[i, j] += '*'
-    return annot
+            if i != j and pval_df.loc[i, j] < 0.05:
+                annot.loc[i, j] += f"\n(p={pval_df.loc[i, j]:.2g})"
 
-def plot_heatmap(corr_df, annot_df, title, output_file):
-    """
-    Plots and saves a heatmap with annotated correlation values.
-    """
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(corr_df, annot=annot_df, fmt='', cmap='coolwarm', center=0,
-                linewidths=0.5, square=True, cbar_kws={'shrink': 0.8})
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(output_file)
+    # Plotting
+    plt.figure(figsize=(14, 12))
+    sns.heatmap(corr_df, annot=annot, fmt='', cmap='coolwarm', center=0, linewidths=0.5, square=True)
+    plt.title(title, fontsize=16)
+    plt.tight_layout(pad=3.0)
+    
+    try:
+        plt.savefig(output_path, dpi=300)
+        print(f"Heatmap successfully saved to: '{output_path}'")
+    except Exception as e:
+        print(f"Error saving heatmap: {e}")
+        
     plt.close()
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate Spearman correlation heatmap from Excel data.")
-    parser.add_argument("file", help="Path to the Excel file.")
-    parser.add_argument("sheet", help="Sheet name in the Excel file.")
-    parser.add_argument("--title", default="Spearman Correlation Matrix", help="Title of the heatmap.")
-    parser.add_argument("--output", default="spearman_correlation_heatmap.png", help="Output image file name.")
-    parser.add_argument("--export_csv", action="store_true", help="Export correlation and p-value matrices as CSV.")
-    args = parser.parse_args()
+    """
+    Main function to interactively get user input and run the analysis.
+    """
+    print("--- Interactive Spearman Correlation Analysis ---")
+    
+    # 1. Get user input
+    file_path = input("Enter the full path to your Excel file: ").strip()
+    sheet_name = input("Enter the exact name of the sheet to analyze: ").strip()
+    heatmap_title = input("Enter the desired title for the heatmap: ").strip()
+    
+    # --- Workflow ---
+    # 2. Load and clean data
+    df_clean = load_and_clean_data(file_path, sheet_name)
+    
+    if df_clean is None or df_clean.empty:
+        print("Exiting: Data could not be loaded or is empty after cleaning.")
+        return
 
-    df = load_excel_data(args.file, args.sheet)
-    corr_df, pval_df = compute_spearman_corr(df)
-    annot_df = annotate_significance(corr_df, pval_df)
-    plot_heatmap(corr_df, annot_df, args.title, args.output)
+    # 3. Calculate correlation
+    corr_df, pval_df = calculate_spearman_correlation(df_clean)
+    
+    if corr_df is None:
+        print("Exiting: Correlation could not be calculated.")
+        return
 
-    if args.export_csv:
-        corr_df.to_csv("correlation_matrix.csv")
-        pval_df.to_csv("pvalue_matrix.csv")
-        print("CSV files exported: correlation_matrix.csv, pvalue_matrix.csv")
+    # 4. Create output directory if it doesn't exist
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 5. Generate a safe filename from the user's title
+    # Remove special characters and replace spaces with underscores
+    safe_filename = re.sub(r'[^a-zA-Z0-9_\- ]', '', heatmap_title).replace(' ', '_')
+    output_filename = f"{safe_filename}.png"
+    output_path = os.path.join(output_dir, output_filename)
+    
+    # 6. Generate and save the heatmap
+    generate_heatmap(corr_df, pval_df, heatmap_title, output_path)
 
 if __name__ == "__main__":
     main()
+
